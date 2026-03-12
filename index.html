@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PEMDS — Malware Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #080c10;
+      --surface:  #0d1117;
+      --border:   #1e3a2f;
+      --green:    #00ff88;
+      --green-dim:#00cc6a;
+      --red:      #ff3b5c;
+      --yellow:   #ffd700;
+      --text:     #c9d1d9;
+      --muted:    #4a5568;
+      --mono:     'Share Tech Mono', monospace;
+      --sans:     'Rajdhani', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: hidden;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glow top bar */
+    .topbar {
+      width: 100%;
+      padding: 12px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
+    }
+    .topbar-logo {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--green);
+      letter-spacing: 3px;
+    }
+    .topbar-status {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .status-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--green); }
+      50%       { opacity: 0.4; box-shadow: none; }
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 60px 20px 40px;
+      position: relative;
+      z-index: 1;
+    }
+    .hero-title {
+      font-family: var(--mono);
+      font-size: clamp(36px, 7vw, 72px);
+      color: var(--green);
+      letter-spacing: 10px;
+      text-shadow: 0 0 40px rgba(0,255,136,0.4);
+      animation: flicker 6s infinite;
+    }
+    @keyframes flicker {
+      0%,95%,100% { opacity: 1; }
+      96%          { opacity: 0.7; }
+      97%          { opacity: 1; }
+      98%          { opacity: 0.5; }
+    }
+    .hero-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 5px;
+      margin-top: 10px;
+    }
+    .hero-line {
+      width: 200px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      margin: 20px auto;
+    }
+
+    /* Upload card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 40px;
+      width: 100%;
+      max-width: 600px;
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 0 60px rgba(0,255,136,0.04);
+    }
+    .card-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--green);
+      letter-spacing: 3px;
+      margin-bottom: 20px;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 4px;
+      padding: 50px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--green);
+      background: rgba(0,255,136,0.03);
+    }
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .drop-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+    .drop-text {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .drop-text span {
+      color: var(--green);
+    }
+    .drop-types {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 8px;
+      letter-spacing: 2px;
+    }
+
+    /* Selected file */
+    .file-selected {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: rgba(0,255,136,0.05);
+      border: 1px solid var(--green-dim);
+      border-radius: 4px;
+      margin-top: 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--green);
+    }
+    .file-selected.show { display: flex; }
+
+    /* Scan button */
+    .btn-scan {
+      width: 100%;
+      margin-top: 20px;
+      padding: 16px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 14px;
+      letter-spacing: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-scan::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0,255,136,0.1), transparent);
+      transition: left 0.4s;
+    }
+    .btn-scan:hover::before { left: 100%; }
+    .btn-scan:hover {
+      background: rgba(0,255,136,0.08);
+      box-shadow: 0 0 20px rgba(0,255,136,0.2);
+    }
+    .btn-scan:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Loading */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 30px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--green);
+      letter-spacing: 2px;
+    }
+    .loading.show { display: block; }
+    .loading-bar {
+      width: 100%;
+      height: 2px;
+      background: var(--border);
+      margin-top: 16px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .loading-bar-fill {
+      height: 100%;
+      background: var(--green);
+      width: 0%;
+      animation: scan-progress 2.5s ease-in-out forwards;
+    }
+    @keyframes scan-progress {
+      0%   { width: 0%; }
+      60%  { width: 80%; }
+      100% { width: 95%; }
+    }
+
+    /* Result */
+    .result {
+      display: none;
+      margin-top: 24px;
+    }
+    .result.show { display: block; }
+
+    .result-badge {
+      text-align: center;
+      padding: 30px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .result-badge.benign {
+      background: rgba(0,255,136,0.06);
+      border: 1px solid var(--green);
+    }
+    .result-badge.malware {
+      background: rgba(255,59,92,0.06);
+      border: 1px solid var(--red);
+    }
+
+    .result-label {
+      font-family: var(--mono);
+      font-size: clamp(28px, 6vw, 48px);
+      letter-spacing: 8px;
+      font-weight: bold;
+    }
+    .benign  .result-label { color: var(--green); text-shadow: 0 0 20px rgba(0,255,136,0.5); }
+    .malware .result-label { color: var(--red);   text-shadow: 0 0 20px rgba(255,59,92,0.5); }
+
+    .result-confidence {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+      letter-spacing: 2px;
+    }
+
+    /* Details grid */
+    .details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .detail-item {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: 2px;
+    }
+    .detail-key {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    .detail-val {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    /* Features list */
+    .features-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 3px;
+      margin: 20px 0 10px;
+    }
+    .feature-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .feature-name { color: var(--muted); }
+    .feature-val  { color: var(--green); }
+
+    /* Reset button */
+    .btn-reset {
+      width: 100%;
+      margin-top: 16px;
+      padding: 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 3px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.2s;
+    }
+    .btn-reset:hover { border-color: var(--muted); color: var(--text); }
+
+    /* Error */
+    .error-box {
+      display: none;
+      margin-top: 16px;
+      padding: 14px 16px;
+      background: rgba(255,59,92,0.06);
+      border: 1px solid var(--red);
+      border-radius: 2px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--red);
+      letter-spacing: 1px;
+    }
+    .error-box.show { display: block; }
+
+    /* Footer */
+    footer {
+      margin-top: 60px;
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-logo">P.E.M.D.S</div>
+    <div class="topbar-status">
+      <span class="status-dot"></span>SYSTEM ONLINE
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-title">PEMDS</div>
+    <div class="hero-sub">PORTABLE EXECUTABLE MALWARE DETECTION SYSTEM</div>
+    <div class="hero-line"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">// UPLOAD FILE FOR ANALYSIS</div>
+
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".exe,.dll,.sys" />
+      <div class="drop-icon">⬆</div>
+      <div class="drop-text">Drop file here or <span>click to browse</span></div>
+      <div class="drop-types">.EXE &nbsp;·&nbsp; .DLL &nbsp;·&nbsp; .SYS</div>
+    </div>
+
+    <div class="file-selected" id="fileSelected">
+      <span>📄</span>
+      <span id="fileName">—</span>
+      <span id="fileSize" style="margin-left:auto;color:var(--muted);font-size:10px;"></span>
+    </div>
+
+    <button class="btn-scan" id="btnScan" onclick="startScan()" disabled>
+      [ INITIATE SCAN ]
+    </button>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="loading" id="loading">
+      <div>SCANNING FILE...</div>
+      <div class="loading-bar"><div class="loading-bar-fill" id="loadingFill"></div></div>
+    </div>
+
+    <div class="result" id="result"></div>
+  </div>
+
+  <footer>GROUP 7 · PEMDS · SK-THONBURI.AC.TH</footer>
+
+  <script>
+    const fileInput   = document.getElementById("fileInput");
+    const dropzone    = document.getElementById("dropzone");
+    const fileSelected = document.getElementById("fileSelected");
+    const fileName    = document.getElementById("fileName");
+    const fileSize    = document.getElementById("fileSize");
+    const btnScan     = document.getElementById("btnScan");
+    const loading     = document.getElementById("loading");
+    const result      = document.getElementById("result");
+    const errorBox    = document.getElementById("errorBox");
+
+    // Drag & drop styling
+    dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("dragover"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer.files[0]) {
+        fileInput.files = e.dataTransfer.files;
+        handleFileSelect(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+    });
+
+    function handleFileSelect(file) {
+      fileName.textContent = file.name;
+      fileSize.textContent = (file.size / 1024).toFixed(1) + " KB";
+      fileSelected.classList.add("show");
+      btnScan.disabled = false;
+      result.classList.remove("show");
+      errorBox.classList.remove("show");
+    }
+
+    async function startScan() {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      // Show loading
+      btnScan.disabled = true;
+      loading.classList.add("show");
+      result.classList.remove("show");
+      errorBox.classList.remove("show");
+
+      // Reset loading bar animation
+      const fill = document.getElementById("loadingFill");
+      fill.style.animation = "none";
+      fill.offsetHeight;
+      fill.style.animation = "";
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res  = await fetch("/scan", { method: "POST", body: formData });
+        const data = await res.json();
+
+        loading.classList.remove("show");
+
+        if (data.error) {
+          errorBox.textContent = "ERROR: " + data.error;
+          errorBox.classList.add("show");
+          btnScan.disabled = false;
+          return;
+        }
+
+        renderResult(data);
+
+      } catch (err) {
+        loading.classList.remove("show");
+        errorBox.textContent = "ERROR: Cannot connect to server";
+        errorBox.classList.add("show");
+        btnScan.disabled = false;
+      }
+    }
+
+    function renderResult(data) {
+      const isMalware = data.label === "MALWARE";
+      const cls = isMalware ? "malware" : "benign";
+      const icon = isMalware ? "⚠" : "✓";
+
+      let featuresHTML = "";
+      if (data.top_features) {
+        featuresHTML = `
+          <div class="features-title">// TOP FEATURE INDICATORS</div>
+          ${Object.entries(data.top_features).map(([k, v]) => `
+            <div class="feature-row">
+              <span class="feature-name">${k}</span>
+              <span class="feature-val">${v}</span>
+            </div>`).join("")}
+        `;
+      }
+
+      result.innerHTML = `
+        <div class="result-badge ${cls}">
+          <div style="font-size:32px;margin-bottom:8px;">${icon}</div>
+          <div class="result-label">${data.label}</div>
+          <div class="result-confidence">CONFIDENCE: ${data.confidence}%</div>
+        </div>
+        <div class="details">
+          <div class="detail-item">
+            <div class="detail-key">FILENAME</div>
+            <div class="detail-val">${data.filename}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-key">FILE SIZE</div>
+            <div class="detail-val">${data.file_size_kb} KB</div>
+          </div>
+        </div>
+        ${featuresHTML}
+        <button class="btn-reset" onclick="resetScan()">[ SCAN ANOTHER FILE ]</button>
+      `;
+
+      result.classList.add("show");
+    }
+
+    function resetScan() {
+      fileInput.value = "";
+      fileSelected.classList.remove("show");
+      result.classList.remove("show");
+      errorBox.classList.remove("show");
+      btnScan.disabled = true;
+      fileName.textContent = "—";
+    }
+  </script>
+</body>
+</html>
